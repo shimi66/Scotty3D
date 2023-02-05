@@ -142,6 +142,9 @@ void Pipeline< primitive_type, Program, flags >::run(
 			//"Less" means the depth test passes when the new fragment has depth less than the stored depth.
 			//A1T4: Depth_Less
 			//TODO: implement depth test! We want to only emit fragments that have a depth less than the stored depth, hence "Depth_Less"
+			if (f.fb_position.z > fb_depth){
+				continue;
+			}
 		} else {
 			static_assert((flags & PipelineMask_Depth) <= Pipeline_Depth_Always, "Unknown depth test flag.");
 		}
@@ -165,12 +168,12 @@ void Pipeline< primitive_type, Program, flags >::run(
 			} else if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Add) {
 				//A1T4: Blend_Add
 				//TODO: framebuffer color should have fragment color multiplied by fragment opacity added to it.
-				fb_color = sf.color; //<-- replace this line
+				fb_color += sf.color*sf.opacity; 
 			} else if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Over) {
 				//A1T4: Blend_Over
 				//TODO: set framebuffer color to the result of "over" blending (also called "alpha blending") the fragment color over the framebuffer color, using the fragment's opacity
 				// 		You may assume that the framebuffer color has its alpha premultiplied already, and you just want to compute the resulting composite color
-				fb_color = sf.color; //<-- replace this line
+				fb_color = sf.opacity * sf.color + (1-sf.opacity) * fb_color; //<-- replace this line
 			} else {
 				static_assert((flags & PipelineMask_Blend) <= Pipeline_Blend_Over, "Unknown blending flag.");
 			}
@@ -364,14 +367,699 @@ void Pipeline< p, P, flags >::rasterize_line(
 	//TODO: Check out the block comment above this function for more information on how to fill in this function!
 	// 		The OpenGL specification section 3.5 may also come in handy.
 
-	{ //As a placeholder, draw a point in the middle of the line:
-		//(remove this code once you have a real implementation)
-		Fragment mid;
-		mid.fb_position = (va.fb_position + vb.fb_position) / 2.0f;
-		mid.attributes = va.attributes;
-		mid.derivatives.fill(Vec2(0.0f, 0.0f));
-		emit_fragment(mid);
+
+
+	float x1;
+	float y1;
+	float x2;
+	float y2;
+	int type_of_line;
+	int ab;
+	float dx;
+	float dy;
+	float slope;
+	float b;
+	float x_prime;
+	float y_prime;
+	float z;
+
+	dx = vb.fb_position.x - va.fb_position.x;
+	dy = vb.fb_position.y - va.fb_position.y;
+	slope = dy/dx;
+
+	auto interp_z = [](float x, float y, ClippedVertex const &va, ClippedVertex const &vb){
+		float dist_a;
+		float dist_b;
+		float sum_dist;
+
+		dist_a = (va.fb_position.y - y)*(va.fb_position.y - y) + (va.fb_position.x - x)*(va.fb_position.x - x);
+		dist_b = (vb.fb_position.y - y)*(vb.fb_position.y - y) + (vb.fb_position.x - x)*(vb.fb_position.x - x);
+		sum_dist = dist_a+dist_b;
+
+		return va.fb_position.z*(1 - dist_a/sum_dist) + vb.fb_position.z*(1- dist_b/sum_dist);
+	};
+
+	if (dx == 0){
+		// line is vertical
+		type_of_line = 2;
+		if (dy > 0){
+			ab = 0;
+			x1 = va.fb_position.x;
+			x2 = vb.fb_position.x;
+			y1 = va.fb_position.y;
+			y2 = vb.fb_position.y;
+		}
+		else {
+			ab = 1;
+			x1 = vb.fb_position.x;
+			x2 = va.fb_position.x;
+			y1 = vb.fb_position.y;
+			y2 = va.fb_position.y;
+		}
+	} 
+	else if (dy == 0){
+		// line is horizontal
+		type_of_line = 3;
+		if (dx > 0){
+			ab = 0;
+			x1 = va.fb_position.x;
+			x2 = vb.fb_position.x;
+			y1 = va.fb_position.y;
+			y2 = vb.fb_position.y;
+		}
+		else {
+			ab = 1;
+			x1 = vb.fb_position.x;
+			x2 = va.fb_position.x;
+			y1 = vb.fb_position.y;
+			y2 = va.fb_position.y;
+		}
 	}
+	else {
+		slope = dy/dx;
+		if (dy < 0.0f && dx < 0.0f){
+			ab = 1;
+			x1 = vb.fb_position.x;
+			x2 = va.fb_position.x;
+			y1 = vb.fb_position.y;
+			y2 = va.fb_position.y;
+		}
+		else {
+			ab = 0;
+			x1 = va.fb_position.x;
+			x2 = vb.fb_position.x;
+			y1 = va.fb_position.y;
+			y2 = vb.fb_position.y;
+		}
+
+		if (std::abs(slope) <= 1){
+			// absolute slope greater than 0 and less than 1
+			type_of_line = 0;
+		}
+		else {
+			// absolute slope greater than 1
+			type_of_line = 1;
+		}
+	}
+
+
+	// float dy = vb.fb_position.y - va.fb_position.y;
+
+	// float dx = vb.fb_position.x - va.fb_position.x;
+
+	// float slope = dy/dx;
+
+
+
+	// we are always going to draw from x1,y1 to x2,y2
+
+	// calc b for ease of calculations
+	b = y1 - slope * x1;
+	
+	// handle starting edge case, does the point reside top right or bottom right of diamond
+
+
+	// types of starting edge cases
+	float yc = std::floor(y1) + 0.5f;
+	float xc = std::floor(x1) + 0.5f;
+	// 5. slope of 0
+	if (slope == 0.0f) {
+
+		if (ab == 0){
+			if (y1 + x1 - yc - xc <= 0.5f && (-y1 + x1 - yc - xc <= -0.5f)){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+		else {
+			yc = std::floor(y2) + 0.5f;
+			xc = std::floor(x2) + 0.5f;
+			if (y2 - x2 - yc + xc <= 0.5f && y2 + x2 - xc - yc <= 0.5f){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+	}
+	// 6. slope of inf
+	else if (dx == 0.0f){
+		if (ab == 0){
+			if (y1 - x1 - yc + xc <= 0.5f && y1 + x1 - yc - xc <= 0.5f){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+		else {
+			yc = std::floor(y2) + 0.5f;
+			xc = std::floor(x2) + 0.5f;
+			if (y2 + x2 - yc - xc >= -0.5f && -y2 + x2 - yc - xc <= -0.5f){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+	}
+	// 1. pos slope going from a to b
+	else if (slope > 0 && ab == 0){
+		// inside bottom left triangle
+		if (y1 + x1 - yc - xc < -0.5f){
+			// if endpoint outisde diamond draw this point
+			if ((y2 + x2 - yc - xc >= 0.5f) || (y2 - x2 - yc + xc >= 0.5f) || (-y2 + x2 -yc -xc >= -0.5f)){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+		// inside bottom right triangle
+		else if (-y1 + x1 - yc - xc >= -0.5){
+			// can add in check for if we end in diamond
+			if (slope >= 1){
+				x_prime = (yc - b)/slope;
+				if (std::floor(x_prime) == std::floor(x1)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+					
+				}
+			}
+		}
+		// inside top left triangle
+		else if (y1 - x1 - yc + xc >= 0.5){
+			// can add in check for if we end in diamond
+			if (slope <= 1){
+
+				y_prime = slope*(xc) + b;
+				if (std::floor(y_prime) == std::floor(y1)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+				}
+			}
+		}
+		// we are in the diamond
+		else if (y1 + x1 - yc - xc < 0.5){
+			// can add in check for if we end within diamond 
+			Fragment frag;
+			frag.attributes = va.attributes; 
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+		}
+	}
+	// 2. pos slope but going from b to a
+	else if (slope > 0 && ab == 1){
+		yc = std::floor(y2) + 0.5f;
+		xc = std::floor(x2) + 0.5f;
+		// inside top right triangle
+		if (y2 + x2 - yc - xc >= 0.5f){
+			// if endpoint outisde diamond draw this point
+			if ((y1 + x1 - yc - xc >= 0.5f) || (y1 - x1 - yc + xc >= 0.5f) || (-y1 + x1 -yc -xc) >= -0.5f){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+		// inside bottom right triangle
+		else if (-y2 + x2 - yc - xc >= -0.5){
+			// can add in check for if we end in diamond
+			if (slope <= 1){
+				x_prime = (yc - b)/slope;
+				if (std::floor(x_prime) == std::floor(x2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+					
+				}
+			}
+		}
+		// inside top left triangle
+		else if (y2 - x2 - yc + xc >= 0.5){
+			// can add in check for if we end in diamond
+			if (slope >= 1){
+
+				y_prime = slope*(xc) + b;
+				if (std::floor(y_prime) == std::floor(y2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+				}
+			}
+		}
+		// we are in the diamond
+		else if (y2 + x2 - yc - xc >= -0.5){
+			// can add in check for if we end within diamond 
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+		}
+	}
+	// 3. negative slope going from a to b
+	else if (slope < 0 && ab == 0){
+		// inside top left triangle
+		if (y1 - x1 - yc + xc >= 0.5f){
+			// if endpoint outisde diamond draw this point (could add check for inside the diamond)
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+			
+		}
+		// inside bottom left triangle
+		else if (y1 + x1 - yc - xc <= -0.5){
+			// can add in check for if we end in diamond
+			if (std::abs(slope) <= 1){
+				x_prime = (yc - b)/slope;
+				if (std::floor(x_prime) == std::floor(x1)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+					
+				}
+			}
+		}
+		// inside top right triangle
+		else if (y1 - x1 - yc + xc >= 0.5){
+			// can add in check for if we end in diamond
+			if (std::abs(slope) >= 1){
+
+				y_prime = slope*(xc) + b;
+				if (std::floor(y_prime) == std::floor(y1)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+				}
+			}
+		}
+		// we are in the diamond
+		else if (-y1 + x1 - yc - xc <= -0.5){
+			// can add in check for if we end within diamond 
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+		}
+	}
+	// 4. negative slope going from b to a
+	else if (slope < 0 && ab == 1){
+		yc = std::floor(y2) + 0.5f;
+		xc = std::floor(x2) + 0.5f;
+		// inside bottom right triangle
+		if (-y2 + x2 - yc - xc >= -0.5f){
+			// if endpoint outisde diamond draw this point (could add check for inside the diamond)
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+			
+		}
+		// inside bottom left triangle
+		else if (y2 + x2 - yc - xc <= -0.5){
+			// can add in check for if we end in diamond
+			if (std::abs(slope) >= 1){
+				x_prime = (yc - b)/slope;
+				if (std::floor(x_prime) == std::floor(x2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+					
+				}
+			}
+		}
+		// inside top right triangle
+		else if (y2 - x2 - yc + xc >= 0.5){
+			// can add in check for if we end in diamond
+			if (std::abs(slope) <= 1){
+
+				y_prime = slope*(xc) + b;
+				if (std::floor(y_prime) == std::floor(y2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+				}
+			}
+		}
+		// we are in the diamond
+		else if (y2 - x2 - yc + xc <= 0.5){
+			// can add in check for if we end within diamond 
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+		}
+	}
+
+
+
+
+
+	// for loop to emit intermediate fragments (multiple cases)
+
+	// horizontal case
+	if (type_of_line == 3) {
+		y_prime = std::floor(y1);
+		for (x_prime = std::floor(x1) + 1.0f; x_prime <= std::floor(x2) - 1.0f; x_prime++){
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(x_prime + 0.5f, y_prime + 0.5f, va, vb);
+			frag.fb_position = Vec3(x_prime + 0.5f, y_prime + 0.5f, z);
+			emit_fragment(frag);
+		}
+
+	}
+	// vertical case
+	else if (type_of_line == 2){
+		x_prime = std::floor(x1);
+
+		for (y_prime = std::floor(y1) + 1.0f; y_prime <= std::floor(y2) - 1.0f; y_prime++){
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(x_prime + 0.5f, y_prime + 0.5f, va, vb);
+			frag.fb_position = Vec3(x_prime + 0.5f, y_prime + 0.5f, z);
+			emit_fragment(frag);
+		}
+	}
+	// pos abs slope greater than 1
+	else if (type_of_line == 1){
+		for (y_prime = std::floor(y1) + 1.0f; y_prime <= std::floor(y2) - 1.0f; y_prime++){
+			x_prime = (y_prime + 0.5f - b)/slope;
+			Fragment frag;  
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(std::floor(x_prime) + 0.5f, std::floor(y_prime) + 0.5f, va, vb);
+			frag.fb_position = Vec3(std::floor(x_prime) + 0.5f, y_prime + 0.5f, z);
+			emit_fragment(frag);
+		}
+	}
+	// pos abs slope less than 1 case
+	else if (type_of_line == 0){
+		// may not need to floor x2
+		for (x_prime = std::floor(x1) + 1.0f; x_prime <= std::floor(x2) - 1.0f; x_prime++){
+			y_prime = slope*(x_prime + 0.5f) + b;
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(std::floor(x_prime) + 0.5f, std::floor(y_prime) + 0.5f, va, vb);
+			frag.fb_position = Vec3(x_prime + 0.5f, std::floor(y_prime) + 0.5f, z);
+			emit_fragment(frag);
+		}
+	}
+
+	// handle end edge case, does the point reside top right or bottom right of diamond
+	// 1. slope is 0 
+	yc = std::floor(y2) + 0.5f;
+	xc = std::floor(x2) + 0.5f;
+	if (slope == 0){
+		if (ab == 0){
+			if ((y2 + x2 - yc - xc >= 0.5f) || (-y2 + x2 - yc - xc <= -0.5f)){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+		else {
+			yc = std::floor(y1) + 0.5f;
+			xc = std::floor(x1) + 0.5f;
+			if (y1 - x1 - yc + xc >= 0.5 || y1 + x1 - yc - xc <= -0.5){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+	}
+	// slope is inf
+	else if (dx == 0){
+		if (ab == 0){
+			if (y2 - x2 - yc + xc >= 0.5f || y2 + x2 - yc - xc >= 0.5f){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+		else {
+			yc = std::floor(y1) + 0.5f;
+			xc = std::floor(x1) + 0.5f;
+			if (y1 + x1 - yc - xc <= -0.5f || -y1 + x1 - yc - xc >= -0.5f){
+				Fragment frag;
+				frag.attributes = va.attributes;
+				frag.derivatives.fill(Vec2(0.0f, 0.0f));
+				z = interp_z(xc, yc, va, vb);
+				frag.fb_position = Vec3(xc, yc, z);
+				emit_fragment(frag);
+			}
+		}
+	}
+	// slope is pos and a to b
+	else if (slope > 0 && ab == 0){
+		// inside top right triangle
+		if (y2 + x2 - yc - xc >= 0.5f){
+			// if startpoint outisde diamond draw this point ( could be checked )
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+		}
+		// inside bottom right triangle
+		else if (-y2 + x2 - yc - xc >= -0.5){
+			// can add in check for if we end in diamond
+			if (slope <= 1){
+				x_prime = (yc - b)/slope;
+				if (std::floor(x_prime) == std::floor(x2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+					
+				}
+			}
+		}
+		// inside top left triangle
+		else if (y2 - x2 - yc + xc >= 0.5){
+			// can add in check for if we end in diamond
+			if (slope >= 1){
+				y_prime = slope*(xc) + b;
+				if (std::floor(y_prime) == std::floor(y2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+				}
+			}
+		}
+	}
+	// slope is pos and b to a
+	else if (slope > 0 && ab == 1){
+		yc = std::floor(y1) + 0.5f;
+		xc = std::floor(x1) + 0.5f;
+		// inside bottom left triangle
+		if (y1 + x1 - yc - xc <= -0.5f){
+			// if startpoint outisde diamond draw this point ( could be checked )
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+		}
+		// inside bottom right triangle
+		else if (-y1+ x1 - yc - xc >= -0.5){
+			// can add in check for if we end in diamond
+			if (slope >= 1){
+				x_prime = (yc - b)/slope;
+				if (std::floor(x_prime) == std::floor(x1)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+					
+				}
+			}
+		}
+		// inside top left triangle
+		else if (y1 - x1 - yc + xc >= 0.5){
+			// can add in check for if we end in diamond
+			if (slope <= 1){
+
+				y_prime = slope*(xc) + b;
+				if (std::floor(y_prime) == std::floor(y2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+				}
+			}
+		}
+	}
+	// slope negative a to b
+	else if (slope < 0 && ab == 0){
+		// inside bottom right triangle
+		if (-y1 + x1 - yc - xc >= -0.5f){
+			// if endpoint outisde diamond draw this point (could add check for inside the diamond)
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+			
+		}
+		// inside bottom left triangle
+		else if (y2 + x2 - yc - xc <= -0.5){
+			// can add in check for if we end in diamond
+			if (std::abs(slope) >= 1){
+				x_prime = (yc - b)/slope;
+				if (std::floor(x_prime) == std::floor(x2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+					
+				}
+			}
+		}
+		// inside top right triangle
+		else if (y2 - x2 - yc + xc >= 0.5){
+			// can add in check for if we end in diamond
+			if (std::abs(slope) <= 1){
+
+				y_prime = slope*(xc) + b;
+				if (std::floor(y_prime) == std::floor(y2)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+				}
+			}
+		}
+	}
+	// slope negative b to a
+	else if (slope < 0 && ab == 1){
+		yc = std::floor(y1) + 0.5f;
+		xc = std::floor(x1) + 0.5f;
+		// inside top left triangle
+		if (y1 - x1 - yc + xc >= 0.5f){
+			// if endpoint startpoint diamond draw this point (could add check for inside the diamond)
+			Fragment frag;
+			frag.attributes = va.attributes;
+			frag.derivatives.fill(Vec2(0.0f, 0.0f));
+			z = interp_z(xc, yc, va, vb);
+			frag.fb_position = Vec3(xc, yc, z);
+			emit_fragment(frag);
+			
+		}
+		// inside bottom left triangle
+		else if (y1 + x1 - yc - xc <= -0.5){
+			// can add in check for if we end in diamond
+			if (std::abs(slope) <= 1){
+				x_prime = (yc - b)/slope;
+				if (std::floor(x_prime) == std::floor(x1)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+					
+				}
+			}
+		}
+		// inside top right triangle
+		else if (y1 - x1 - yc + xc >= 0.5){
+			// can add in check for if we end in diamond
+			if (std::abs(slope) >= 1){
+				y_prime = slope*(xc) + b;
+				if (std::floor(y_prime) == std::floor(y1)){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f, 0.0f));
+					z = interp_z(xc, yc, va, vb);
+					frag.fb_position = Vec3(xc, yc, z);
+					emit_fragment(frag);
+				}
+			}
+		}
+	}
+
 
 }
 
@@ -427,11 +1115,159 @@ void Pipeline< p, P, flags >::rasterize_triangle(
 		//A1T3: flat triangles
 		//TODO: rasterize triangle (see block comment above this function).
 
-		//As a placeholder, here's code that draws some lines:
-		//(remove this and replace it with a real solution)
-		Pipeline< PrimitiveType::Lines, P, flags >::rasterize_line(va, vb, emit_fragment);
-		Pipeline< PrimitiveType::Lines, P, flags >::rasterize_line(vb, vc, emit_fragment);
-		Pipeline< PrimitiveType::Lines, P, flags >::rasterize_line(vc, va, emit_fragment);
+		auto determine_sign = [](float cx, float cy, ClippedVertex const &p1, ClippedVertex const &p2) {
+			return (cx - p2.fb_position.x) * (p1.fb_position.y - p2.fb_position.y) - (p1.fb_position.x - p2.fb_position.x) * (cy - p2.fb_position.y);
+		};
+
+		auto matching_signs3 = [](float f1, float f2, float f3){
+			return (f1 > 0.0f && f2 > 0.0f && f3 > 0.0f) || (f1 < 0.0f && f2 < 0.0f && f3 < 0.0f);
+		};
+
+		auto edge_case = [](bool match, float d1, float d2, float d3) {
+			// det1 associated with c
+			// det2 associated with a
+			// det3 associated with b
+			if (!match){
+				if(!d1 && !d2){
+					// falls on b
+					return 4;
+				}
+				else if (!d1 && !d3){
+					// falls on a
+					return 5;
+				}
+				else if (!d2 && !d3){
+					// falls on c
+					return 6;
+				}
+				else if (!d1 && ((d2 > 0.0f && d3 > 0.0f) || (d2 < 0.0f && d3 < 0.0f))){
+					return 1;
+				}
+				else if (!d2 && ((d1 > 0.0f && d3 > 0.0f) || (d1 < 0.0f && d3 < 0.0f))){
+					return 2;
+				}
+				else if (!d3 && ((d2 > 0.0f && d1 > 0.0f) || (d2 < 0.0f && d1 < 0.0f))){
+					return 3;
+				}
+			}
+			return 0;
+		};
+
+		auto point_on_edge = [](ClippedVertex const &non_edge, ClippedVertex const &edge1, ClippedVertex const &edge2){
+			float dy = edge2.fb_position.y - edge1.fb_position.y;
+			float dx = edge2.fb_position.x - edge1.fb_position.x;
+
+			if (dx == 0){
+				if (non_edge.fb_position.x > edge1.fb_position.x){
+					return true;
+				}
+			}
+			else if (dy == 0){
+				if (non_edge.fb_position.y < edge1.fb_position.y){
+					return true;
+				}
+			}
+			
+			float slope = dy/dx;
+			float b = edge1.fb_position.y - slope*(edge1.fb_position.x);
+			if (slope > 0){
+				if (non_edge.fb_position.y < slope*non_edge.fb_position.x + b) {
+					return true;
+				}
+			}
+			else if (slope < 0) {
+				if (non_edge.fb_position.y > slope*non_edge.fb_position.x + b){
+					return true;
+				}
+			}
+
+			return false;
+		};
+		
+		// find equations of halfplanes and desired direction of point
+
+		// find min x, min y and max x, max y
+		float min_x = std::floor(std::min(va.fb_position.x, std::min(vb.fb_position.x, vc.fb_position.x)));
+		float max_x = std::ceil(std::max(va.fb_position.x, std::max(vb.fb_position.x, vc.fb_position.x)));
+		float min_y = std::floor(std::min(va.fb_position.y, std::min(vb.fb_position.y, vc.fb_position.y)));
+		float max_y = std::ceil(std::max(va.fb_position.y, std::max(vb.fb_position.y, vc.fb_position.y)));
+		
+		// std::cout << "min x " << min_x << std::endl;
+		// std::cout << "min y " << min_y << std::endl;
+		// std::cout << "max x " << max_x << std::endl;
+		// std::cout << "max y " << max_y << std::endl;
+
+		float det1;
+		float det2;
+		float det3;
+		bool signs;
+		int edge;
+		float z; 
+		float det_sum;
+
+
+		// iterate from bottom left to top right emitting all fragments that are inside the triangle
+		for (float curr_x = min_x + 0.5f; curr_x <= max_x + 0.5; curr_x++){
+			for (float curr_y = min_y + 0.5f; curr_y <= max_y + 0.5; curr_y++){
+				
+				det1 = determine_sign(curr_x, curr_y, va, vb);
+				det2 = determine_sign(curr_x, curr_y, vb, vc);
+				det3 = determine_sign(curr_x, curr_y, vc, va);
+				
+				signs = matching_signs3(det1, det2, det3);
+
+				edge = edge_case(signs, det1, det2, det3);
+
+				det_sum = det1 + det2 + det3;
+				z = (det1/det_sum)*(vc.fb_position.z) + (det2/det_sum)*(va.fb_position.z) + (det3/det_sum)*(vb.fb_position.z);
+
+				if (edge != 0){
+					bool emit = false;
+					// todo fill in for each type of edge case
+					if (edge == 1){
+						// c is the point not on the edge that our test point falls on
+						emit = point_on_edge(vc, va, vb);
+					}
+					else if (edge == 2){
+						// a is the point not on the edge that our test point falls on
+						emit = point_on_edge(va, vc, vb);
+					}
+					else if (edge == 3){
+						// b is the point not on the edge that our test point falls on 
+						emit = point_on_edge(vb, va, vc);
+					}
+					else if (edge == 4){
+						// falls on vertex b
+						emit = point_on_edge(vc, va, vb) && point_on_edge(va, vc, vb);
+					}
+					else if (edge == 5){
+						// falls on vertex a
+						emit = point_on_edge(vb, va, vc) && point_on_edge(vc, va, vb);
+					}
+					else if (edge == 6){
+						// falls on vertex c
+						emit = point_on_edge(va, vc, vb) && point_on_edge(vb, vc, va);
+					}
+
+					if (emit){
+						Fragment frag;
+						frag.attributes = va.attributes;
+						frag.derivatives.fill(Vec2(0.0f, 0.0f));
+						frag.fb_position = Vec3(curr_x, curr_y, z);
+						emit_fragment(frag);
+					}
+				}
+				else if (signs == 1){
+					Fragment frag;
+					frag.attributes = va.attributes;
+					frag.derivatives.fill(Vec2(0.0f,0.0f));
+					frag.fb_position = Vec3(curr_x, curr_y, z);
+					emit_fragment(frag);
+				}
+				
+			}
+		}
+
 	} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Screen) {
 		//A1T5: screen-space smooth triangles
 		//TODO: rasterize triangle (see block comment above this function).

@@ -1,4 +1,4 @@
-AndrewID:
+AndrewID: evoss
 
 Under each task, write 'Fully implemented.', 'Not attempted.', or explain your attempted solution and where it fails.
 
@@ -8,7 +8,10 @@ Task A1T1:
 	Fully implemented.
 
 Task A1T2:
-	Fully implemented.
+	Everything is fully implemented, except for a few cases where the start point and end point may be within a 
+	diamond in A1T2. Pretty much, the smaller the distance between the  two points, the more trouble my implementation 
+	had. I wsa not sure how to create helper functions in c++ until the last day, so A1T2 became very large and confusing
+	and as I didn't have enough time to go back in and fix everything. Thus I know that there are some issues with this section.
 
 Task A1T3:
 	Fully implemented.

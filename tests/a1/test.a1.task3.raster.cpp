@@ -312,4 +312,46 @@ Test test_a1_task3_raster_thin_2px("a1.task3.raster.thin.2px", []() {
 	);
 });
 
+Test test_a1_task3_raster_bottom("a1.task3.raster.bottom", []() {
+    check_rasterize_triangles(
+        "Skip the bottom row",
+        { FPClippedVertex{ Vec3{ 0.75f, 0.5f, 0.5f }, 1.0f, { 1.0f } },
+          FPClippedVertex{ Vec3{ 4.75f, 0.5f, 0.5f }, 2.0f, { 2.0f } },
+          FPClippedVertex{ Vec3{ 2.75f, 2.25f, 0.5f }, 3.0f, { 3.0f } } },
+        { FPFragment{ Vec3{ 2.5f, 1.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+          FPFragment{ Vec3{ 3.5f, 1.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } } }
+    );
+});
+
+Test test_a1_task3_raster_top("a1.task3.raster.top", []() {
+    check_rasterize_triangles(
+        "Not skip the top row",
+        { FPClippedVertex{ Vec3{ 0.75f, 3.5f, 0.5f }, 1.0f, { 1.0f } },
+          FPClippedVertex{ Vec3{ 4.75f, 3.5f, 0.5f }, 2.0f, { 2.0f } },
+          FPClippedVertex{ Vec3{ 2.75f, 0.75f, 0.5f }, 3.0f, { 3.0f } } },
+        { FPFragment{ Vec3{ 2.5f, 1.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 2.5f, 2.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 1.5f, 2.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 3.5f, 2.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 1.5f, 3.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 2.5f, 3.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 3.5f, 3.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+          FPFragment{ Vec3{ 4.5f, 3.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } } }
+    );
+});
+
+Test test_a1_task3_left_right("a1.task3.raster.left.right", []() {
+    check_rasterize_triangles(
+        "Skip right but not left",
+        { FPClippedVertex{ Vec3{ 0.0f, 1.0f, 0.5f }, 1.0f, { 1.0f } },
+          FPClippedVertex{ Vec3{ 3.0f, 0.0f, 0.5f }, 2.0f, { 2.0f } },
+          FPClippedVertex{ Vec3{ 2.0f, 3.0f, 0.5f }, 3.0f, { 3.0f } } },
+        { FPFragment{ Vec3{ 0.5f, 1.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 1.5f, 1.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 1.5f, 0.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+        FPFragment{ Vec3{ 2.5f, 0.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } },
+          FPFragment{ Vec3{ 1.5f, 2.5f, 0.5f }, {1.0f}, { Vec2{0.0f} } } }
+    );
+});
+
 
