@@ -1111,100 +1111,129 @@ void Pipeline< p, P, flags >::rasterize_triangle(
 	// same code paths. Be aware, however, that all of them need to remain working!
 	// (e.g., if you break Flat while implementing Correct, you won't get points
 	//  for Flat.)
+
+	float min_x = std::floor(std::min(va.fb_position.x, std::min(vb.fb_position.x, vc.fb_position.x)));
+	float max_x = std::ceil(std::max(va.fb_position.x, std::max(vb.fb_position.x, vc.fb_position.x)));
+	float min_y = std::floor(std::min(va.fb_position.y, std::min(vb.fb_position.y, vc.fb_position.y)));
+	float max_y = std::ceil(std::max(va.fb_position.y, std::max(vb.fb_position.y, vc.fb_position.y)));
+	
+
+	float det1;
+	float det2;
+	float det3;
+	float bary_a;
+	float bary_b;
+	float bary_c;
+	bool signs;
+	int edge;
+	float z; 
+	float det_sum;
+	
+	auto determine_sign = [](float cx, float cy, ClippedVertex const &p1, ClippedVertex const &p2) {
+		return (cx - p2.fb_position.x) * (p1.fb_position.y - p2.fb_position.y) - (p1.fb_position.x - p2.fb_position.x) * (cy - p2.fb_position.y);
+	};
+
+	auto matching_signs3 = [](float f1, float f2, float f3){
+		return (f1 > 0.0f && f2 > 0.0f && f3 > 0.0f) || (f1 < 0.0f && f2 < 0.0f && f3 < 0.0f);
+	};
+
+	auto edge_case = [](bool match, float d1, float d2, float d3) {
+		// det1 associated with c
+		// det2 associated with a
+		// det3 associated with b
+		if (!match){
+			if(!d1 && !d2){
+				// falls on b
+				return 4;
+			}
+			else if (!d1 && !d3){
+				// falls on a
+				return 5;
+			}
+			else if (!d2 && !d3){
+				// falls on c
+				return 6;
+			}
+			else if (!d1 && ((d2 > 0.0f && d3 > 0.0f) || (d2 < 0.0f && d3 < 0.0f))){
+				return 1;
+			}
+			else if (!d2 && ((d1 > 0.0f && d3 > 0.0f) || (d1 < 0.0f && d3 < 0.0f))){
+				return 2;
+			}
+			else if (!d3 && ((d2 > 0.0f && d1 > 0.0f) || (d2 < 0.0f && d1 < 0.0f))){
+				return 3;
+			}
+		}
+		return 0;
+	};
+
+	auto point_on_edge = [](ClippedVertex const &non_edge, ClippedVertex const &edge1, ClippedVertex const &edge2){
+		float dy = edge2.fb_position.y - edge1.fb_position.y;
+		float dx = edge2.fb_position.x - edge1.fb_position.x;
+
+		if (dx == 0){
+			if (non_edge.fb_position.x > edge1.fb_position.x){
+				return true;
+			}
+		}
+		else if (dy == 0){
+			if (non_edge.fb_position.y < edge1.fb_position.y){
+				return true;
+			}
+		}
+		
+		float slope = dy/dx;
+		float b = edge1.fb_position.y - slope*(edge1.fb_position.x);
+		if (slope > 0){
+			if (non_edge.fb_position.y < slope*non_edge.fb_position.x + b) {
+				return true;
+			}
+		}
+		else if (slope < 0) {
+			if (non_edge.fb_position.y > slope*non_edge.fb_position.x + b){
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	auto interpolate_attr = [&](float ptx, float pty, ClippedVertex const &va, ClippedVertex const &vb, ClippedVertex const &vc){
+		std::array< float, FA > ret_attr = va.attributes;
+		float d1 = determine_sign(ptx, pty, va, vb);
+		float d2 = determine_sign(ptx, pty, vb, vc);
+		float d3 = determine_sign(ptx, pty, vc, va);
+		float d_sum = d1 + d2 + d3;
+		for(int x = 0; x < 5; x++){
+			ret_attr[x] = (d1/d_sum) * vc.attributes[x] + (d2/d_sum) * va.attributes[x] + (d3/d_sum) * vb.attributes[x];
+		}
+		return ret_attr;
+	};
+
+	auto interpolate_attr2 = [&](float ptx, float pty, std::array< float, FA > const &va_attr, 
+	std::array< float, FA > const &vb_attr, std::array< float, FA > const &vc_attr){
+		std::array< float, FA > ret_attr = va.attributes;
+		float d1 = determine_sign(ptx, pty, va, vb);
+		float d2 = determine_sign(ptx, pty, vb, vc);
+		float d3 = determine_sign(ptx, pty, vc, va);
+		float d_sum = d1 + d2 + d3;
+		for(int x = 0; x < 5; x++){
+			ret_attr[x] = (d1/d_sum) * vc_attr[x] + (d2/d_sum) * va_attr[x] + (d3/d_sum) * vb_attr[x];
+		}
+		return ret_attr;
+	};
+
+	auto interpolate_z = [&](float ptx, float pty, ClippedVertex const &va, ClippedVertex const &vb, ClippedVertex const &vc){
+		float d1 = determine_sign(ptx, pty, va, vb);
+		float d2 = determine_sign(ptx, pty, vb, vc);
+		float d3 = determine_sign(ptx, pty, vc, va);
+		float d_sum = d1 + d2 + d3;
+		return (d1/d_sum) * vc.inv_w + (d2/d_sum) * va.inv_w + (d3/d_sum) * vb.inv_w;
+	};
+
 	if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Flat) {
 		//A1T3: flat triangles
 		//TODO: rasterize triangle (see block comment above this function).
-
-		auto determine_sign = [](float cx, float cy, ClippedVertex const &p1, ClippedVertex const &p2) {
-			return (cx - p2.fb_position.x) * (p1.fb_position.y - p2.fb_position.y) - (p1.fb_position.x - p2.fb_position.x) * (cy - p2.fb_position.y);
-		};
-
-		auto matching_signs3 = [](float f1, float f2, float f3){
-			return (f1 > 0.0f && f2 > 0.0f && f3 > 0.0f) || (f1 < 0.0f && f2 < 0.0f && f3 < 0.0f);
-		};
-
-		auto edge_case = [](bool match, float d1, float d2, float d3) {
-			// det1 associated with c
-			// det2 associated with a
-			// det3 associated with b
-			if (!match){
-				if(!d1 && !d2){
-					// falls on b
-					return 4;
-				}
-				else if (!d1 && !d3){
-					// falls on a
-					return 5;
-				}
-				else if (!d2 && !d3){
-					// falls on c
-					return 6;
-				}
-				else if (!d1 && ((d2 > 0.0f && d3 > 0.0f) || (d2 < 0.0f && d3 < 0.0f))){
-					return 1;
-				}
-				else if (!d2 && ((d1 > 0.0f && d3 > 0.0f) || (d1 < 0.0f && d3 < 0.0f))){
-					return 2;
-				}
-				else if (!d3 && ((d2 > 0.0f && d1 > 0.0f) || (d2 < 0.0f && d1 < 0.0f))){
-					return 3;
-				}
-			}
-			return 0;
-		};
-
-		auto point_on_edge = [](ClippedVertex const &non_edge, ClippedVertex const &edge1, ClippedVertex const &edge2){
-			float dy = edge2.fb_position.y - edge1.fb_position.y;
-			float dx = edge2.fb_position.x - edge1.fb_position.x;
-
-			if (dx == 0){
-				if (non_edge.fb_position.x > edge1.fb_position.x){
-					return true;
-				}
-			}
-			else if (dy == 0){
-				if (non_edge.fb_position.y < edge1.fb_position.y){
-					return true;
-				}
-			}
-			
-			float slope = dy/dx;
-			float b = edge1.fb_position.y - slope*(edge1.fb_position.x);
-			if (slope > 0){
-				if (non_edge.fb_position.y < slope*non_edge.fb_position.x + b) {
-					return true;
-				}
-			}
-			else if (slope < 0) {
-				if (non_edge.fb_position.y > slope*non_edge.fb_position.x + b){
-					return true;
-				}
-			}
-
-			return false;
-		};
-		
-		// find equations of halfplanes and desired direction of point
-
-		// find min x, min y and max x, max y
-		float min_x = std::floor(std::min(va.fb_position.x, std::min(vb.fb_position.x, vc.fb_position.x)));
-		float max_x = std::ceil(std::max(va.fb_position.x, std::max(vb.fb_position.x, vc.fb_position.x)));
-		float min_y = std::floor(std::min(va.fb_position.y, std::min(vb.fb_position.y, vc.fb_position.y)));
-		float max_y = std::ceil(std::max(va.fb_position.y, std::max(vb.fb_position.y, vc.fb_position.y)));
-		
-		// std::cout << "min x " << min_x << std::endl;
-		// std::cout << "min y " << min_y << std::endl;
-		// std::cout << "max x " << max_x << std::endl;
-		// std::cout << "max y " << max_y << std::endl;
-
-		float det1;
-		float det2;
-		float det3;
-		bool signs;
-		int edge;
-		float z; 
-		float det_sum;
-
 
 		// iterate from bottom left to top right emitting all fragments that are inside the triangle
 		for (float curr_x = min_x + 0.5f; curr_x <= max_x + 0.5; curr_x++){
@@ -1272,16 +1301,229 @@ void Pipeline< p, P, flags >::rasterize_triangle(
 		//A1T5: screen-space smooth triangles
 		//TODO: rasterize triangle (see block comment above this function).
 
-		//As a placeholder, here's code that calls the Flat interpolation version of the function:
-		//(remove this and replace it with a real solution)
-		Pipeline< PrimitiveType::Lines, P, (flags  & ~PipelineMask_Interp) | Pipeline_Interp_Flat >::rasterize_triangle(va, vb, vc, emit_fragment);
+		// iterate from bottom left to top right emitting all fragments that are inside the triangle
+		for (float curr_x = min_x + 0.5f; curr_x <= max_x + 0.5; curr_x++){
+			for (float curr_y = min_y + 0.5f; curr_y <= max_y + 0.5; curr_y++){
+				
+				det1 = determine_sign(curr_x, curr_y, va, vb);
+				det2 = determine_sign(curr_x, curr_y, vb, vc);
+				det3 = determine_sign(curr_x, curr_y, vc, va);
+				
+				signs = matching_signs3(det1, det2, det3);
+
+				edge = edge_case(signs, det1, det2, det3);
+
+				det_sum = det1 + det2 + det3;
+
+				bary_a = det2/det_sum;
+				bary_b = det3/det_sum;
+				bary_c = det1/det_sum;
+					
+
+				z = (bary_c)*(vc.fb_position.z) + (bary_a)*(va.fb_position.z) + (bary_b)*(vb.fb_position.z);
+
+				if (edge != 0){
+					bool emit = false;
+					// todo fill in for each type of edge case
+					if (edge == 1){
+						// c is the point not on the edge that our test point falls on
+						emit = point_on_edge(vc, va, vb);
+					}
+					else if (edge == 2){
+						// a is the point not on the edge that our test point falls on
+						emit = point_on_edge(va, vc, vb);
+					}
+					else if (edge == 3){
+						// b is the point not on the edge that our test point falls on 
+						emit = point_on_edge(vb, va, vc);
+					}
+					else if (edge == 4){
+						// falls on vertex b
+						emit = point_on_edge(vc, va, vb) && point_on_edge(va, vc, vb);
+					}
+					else if (edge == 5){
+						// falls on vertex a
+						emit = point_on_edge(vb, va, vc) && point_on_edge(vc, va, vb);
+					}
+					else if (edge == 6){
+						// falls on vertex c
+						emit = point_on_edge(va, vc, vb) && point_on_edge(vb, vc, va);
+					}
+
+					if (emit){
+						Fragment frag;
+						frag.fb_position = Vec3(curr_x, curr_y, z);
+						frag.attributes = interpolate_attr(curr_x, curr_y, va, vb, vc);
+						std::array< float, FA > temp_x = interpolate_attr(curr_x + 1, curr_y, va, vb, vc);
+						std::array< float, FA > temp_y = interpolate_attr(curr_x, curr_y + 1, va, vb, vc);
+						frag.derivatives.fill(Vec2(0.0f, 0.0f));
+						Vec2 deriv_1 = Vec2(temp_x[0] - frag.attributes[0], temp_x[1] - frag.attributes[1]);
+						Vec2 deriv_2 = Vec2(temp_y[0] - frag.attributes[0], temp_y[1] - frag.attributes[1]);
+						frag.derivatives[0] = deriv_1;
+						frag.derivatives[1] = deriv_2;
+						emit_fragment(frag);
+					}
+				}
+				else if (signs == 1){
+					Fragment frag;
+					frag.fb_position = Vec3(curr_x, curr_y, z);
+					frag.attributes = interpolate_attr(curr_x, curr_y, va, vb, vc);
+					std::array< float, FA > temp_x = interpolate_attr(curr_x + 1, curr_y, va, vb, vc);
+					std::array< float, FA > temp_y = interpolate_attr(curr_x, curr_y + 1, va, vb, vc);
+					frag.derivatives.fill(Vec2(0.0f, 0.0f)); 
+					Vec2 deriv_1 = Vec2(temp_x[0] - frag.attributes[0], temp_y[0] - frag.attributes[0]);
+					Vec2 deriv_2 = Vec2(temp_x[1] - frag.attributes[1], temp_y[1] - frag.attributes[1]);
+					frag.derivatives[0] = deriv_1;
+					frag.derivatives[1] = deriv_2;
+					emit_fragment(frag);
+				}
+				
+			}
+		}
+
+		
+
+
+
 	} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Correct) {
 		//A1T5: perspective correct triangles
 		//TODO: rasterize triangle (block comment above this function).
 
-		//As a placeholder, here's code that calls the Screen-space interpolation function:
-		//(remove this and replace it with a real solution)
-		Pipeline< PrimitiveType::Lines, P, (flags  & ~PipelineMask_Interp) | Pipeline_Interp_Screen >::rasterize_triangle(va, vb, vc, emit_fragment);
+		
+
+		for (float curr_x = min_x + 0.5f; curr_x <= max_x + 0.5; curr_x++){
+			for (float curr_y = min_y + 0.5f; curr_y <= max_y + 0.5; curr_y++){
+				
+				det1 = determine_sign(curr_x, curr_y, va, vb);
+				det2 = determine_sign(curr_x, curr_y, vb, vc);
+				det3 = determine_sign(curr_x, curr_y, vc, va);
+				
+				signs = matching_signs3(det1, det2, det3);
+
+				edge = edge_case(signs, det1, det2, det3);
+
+				det_sum = det1 + det2 + det3;
+				z = (det1/det_sum)*(vc.fb_position.z) + (det2/det_sum)*(va.fb_position.z) + (det3/det_sum)*(vb.fb_position.z);
+
+				if (edge != 0){
+					bool emit = false;
+					// todo fill in for each type of edge case
+					if (edge == 1){
+						// c is the point not on the edge that our test point falls on
+						emit = point_on_edge(vc, va, vb);
+					}
+					else if (edge == 2){
+						// a is the point not on the edge that our test point falls on
+						emit = point_on_edge(va, vc, vb);
+					}
+					else if (edge == 3){
+						// b is the point not on the edge that our test point falls on 
+						emit = point_on_edge(vb, va, vc);
+					}
+					else if (edge == 4){
+						// falls on vertex b
+						emit = point_on_edge(vc, va, vb) && point_on_edge(va, vc, vb);
+					}
+					else if (edge == 5){
+						// falls on vertex a
+						emit = point_on_edge(vb, va, vc) && point_on_edge(vc, va, vb);
+					}
+					else if (edge == 6){
+						// falls on vertex c
+						emit = point_on_edge(va, vc, vb) && point_on_edge(vb, vc, va);
+					}
+
+					if (emit){
+						Fragment frag;
+
+						// multiply inv_w by attr
+						std::array< float, FA > attr_a = va.attributes;
+						std::array< float, FA > attr_b = va.attributes;
+						std::array< float, FA > attr_c = va.attributes;
+						std::array< float, FA > frag_attr;
+						float frag_z;
+
+						for (int i = 0; i < 5; i++){
+							attr_a[i] = va.inv_w * va.attributes[i];
+							attr_b[i] = vb.inv_w * vb.attributes[i];
+							attr_c[i] = vc.inv_w * vc.attributes[i];
+						}
+
+						frag_attr = interpolate_attr2(curr_x, curr_y, attr_a, attr_b, attr_c);
+						frag_z = interpolate_z(curr_x, curr_y, va, vb, vc);
+						
+						for(int i = 0; i < 5; i++){
+							frag_attr[i] /= frag_z;
+						}
+
+						frag.attributes = frag_attr;
+
+						std::array< float, FA > temp_x = interpolate_attr2(curr_x + 1, curr_y, attr_a, attr_b, attr_c);
+						float tmp_x_z = interpolate_z(curr_x + 1, curr_y, va, vb, vc);
+						std::array< float, FA > temp_y = interpolate_attr2(curr_x, curr_y + 1, attr_a, attr_b, attr_c);
+						float tmp_y_z = interpolate_z(curr_x, curr_y + 1, va, vb, vc);
+
+						for(int i = 0; i < 5; i++){
+							temp_x[i] /= tmp_x_z;
+							temp_y[i] /= tmp_y_z;
+						}
+
+						frag.derivatives.fill(Vec2(0.0f, 0.0f));
+						Vec2 deriv1 = Vec2(temp_x[0] - frag.attributes[0], temp_y[0] - frag.attributes[0]);
+						Vec2 deriv2 = Vec2(temp_x[1] - frag.attributes[1], temp_y[1] - frag.attributes[1]);
+						frag.derivatives[0] = deriv1;
+						frag.derivatives[1] = deriv2;
+						frag.fb_position = Vec3(curr_x, curr_y, z);
+						emit_fragment(frag);
+					}
+				}
+				else if (signs == 1){
+					Fragment frag;
+
+						// multiply inv_w by attr
+						std::array< float, FA > attr_a = va.attributes;
+						std::array< float, FA > attr_b = va.attributes;
+						std::array< float, FA > attr_c = va.attributes;
+						std::array< float, FA > frag_attr;
+						float frag_z;
+
+						for (int i = 0; i < 5; i++){
+							attr_a[i] = va.inv_w * va.attributes[i];
+							attr_b[i] = vb.inv_w * vb.attributes[i];
+							attr_c[i] = vc.inv_w * vc.attributes[i];
+						}
+
+						frag_attr = interpolate_attr2(curr_x, curr_y, attr_a, attr_b, attr_c);
+						frag_z = interpolate_z(curr_x, curr_y, va, vb, vc);
+						
+						for(int i = 0; i < 5; i++){
+							frag_attr[i] /= frag_z;
+						}
+
+						frag.attributes = frag_attr;
+
+						std::array< float, FA > temp_x = interpolate_attr2(curr_x + 1, curr_y, attr_a, attr_b, attr_c);
+						float tmp_x_z = interpolate_z(curr_x + 1, curr_y, va, vb, vc);
+						std::array< float, FA > temp_y = interpolate_attr2(curr_x, curr_y + 1, attr_a, attr_b, attr_c);
+						float tmp_y_z = interpolate_z(curr_x, curr_y + 1, va, vb, vc);
+
+						for(int i = 0; i < 5; i++){
+							temp_x[i] /= tmp_x_z;
+							temp_y[i] /= tmp_y_z;
+						}
+
+						frag.derivatives.fill(Vec2(0.0f, 0.0f));
+						Vec2 deriv1 = Vec2(temp_x[0] - frag.attributes[0], temp_y[0] - frag.attributes[0]);
+						Vec2 deriv2 = Vec2(temp_x[1] - frag.attributes[1], temp_y[1] - frag.attributes[1]);
+						frag.derivatives[0] = deriv1;
+						frag.derivatives[1] = deriv2;
+						frag.fb_position = Vec3(curr_x, curr_y, z);
+						emit_fragment(frag);
+				}
+				
+			}
+		}
+
 	}
 }
 
