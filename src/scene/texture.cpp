@@ -26,7 +26,7 @@ Spectrum sample_bilinear(HDR_Image const &image, Vec2 uv) {
 	//A1T6: sample_bilinear
 	//TODO: implement bilinear sampling strategy on texture 'image'
 	// std::cout << "uv " << uv << std::endl;
-	// std::cout << "image w and h " << image.w << " " << image.h  << std::endl;
+	std::cout << "image w and h " << image.w << " " << image.h  << std::endl;
 	
 	float x = image.w * std::clamp(uv.x, 0.0f, 1.0f);
 	float y = image.h * std::clamp(uv.y, 0.0f, 1.0f);
@@ -38,7 +38,7 @@ Spectrum sample_bilinear(HDR_Image const &image, Vec2 uv) {
 
 	ix = std::min(ix, int32_t(image.w) - 1);
 	iy = std::min(iy, int32_t(image.h) - 1);
-	// std::cout << "ix and iy " << ix << " " << iy << std::endl;
+	std::cout << "ix and iy " << ix << " " << iy << std::endl;
 
 	float s = x - ix - 0.5f;
 	float t = y - iy - 0.5f;
@@ -47,6 +47,7 @@ Spectrum sample_bilinear(HDR_Image const &image, Vec2 uv) {
 
 	// std::cout << "possible value??? " << image.at(ix+1, iy+1) << std::endl;
 
+	// use current box if i am on top or left edge (4 cases)
 
 	// return sample_nearest(image, uv);
 	return (1-t)*((1-s)*image.at(ix, iy) + s*image.at(ix+1, iy)) + t*((1-s)*image.at(ix, iy+1) + s*image.at(ix+1, iy+1)); //placeholder so image doesn't look blank
@@ -57,8 +58,36 @@ Spectrum sample_trilinear(HDR_Image const &base, std::vector< HDR_Image > const 
 	//A1T6: sample_trilinear
 	//TODO: implement trilinear sampling strategy on using mip-map 'levels'
 
-	std::cout << "base " << uv << std::endl;
+	std::cout << "base w and h " << base.w << " " << base.h  << std::endl;
+	std::cout << "uv " << uv << std::endl;
 	std::cout << "lod " << lod << std::endl;
+
+	float x = base.w * std::clamp(uv.x, 0.0f, 1.0f);
+	float y = base.h * std::clamp(uv.y, 0.0f, 1.0f);
+
+	std::cout << "x, y " << x << " " << y << std::endl;
+
+	int32_t ix = int32_t(std::floor(x - 0.5));
+	int32_t iy = int32_t(std::floor(y - 0.5));
+	int32_t iz = int32_t(std::floor(lod - 0.5));
+	std::cout << "ix and iy iz " << ix << " " << iy << " " << iz << std::endl;
+
+	// call bilinear each level to get h0, h1 (see notes)
+	// interpolate between h0, h1
+
+	if (iz == -1){ 
+		Spectrum h0 = sample_bilinear(base, uv);
+	}
+	else {
+		Spectrum h0 = sample_bilinear(levels[iz], uv);
+	}
+	Spectrum h1 = sample_bilinear(levels[iz+1], uv);
+
+	std::cout << "h0 and h1 " << " " << h1 << std::endl;
+
+
+
+
 
 	return sample_nearest(base, uv); //placeholder so image doesn't look blank
 }

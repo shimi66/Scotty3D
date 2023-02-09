@@ -8,8 +8,8 @@
 #include "../lib/mathlib.h"
 #include "../scene/texture.h"
 
-// todo remove
-#include <iostream>
+// // todo remove
+// #include <iostream>
 
 namespace Programs {
 
