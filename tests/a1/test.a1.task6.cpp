@@ -138,7 +138,7 @@ Test test_a1_task6_bilinear_simple("a1.task6.sample.bilinear.simple", []() {
 
 
 //- - - - - - - - -
-//trilinear
+// trilinear
 
 Test test_a1_task6_trilinear_simple("a1.task6.sample.trilinear.simple", []() {
 	//check trilinear sampling is mixing the right stuff:
@@ -188,6 +188,90 @@ Test test_a1_task6_trilinear_simple("a1.task6.sample.trilinear.simple", []() {
 //-------------------------------------------
 //check mipmap generation:
 
+Test test_a1_task6_generate_mipmap_odd_h("a1.task6.generate_mipmap_odd_h", []() {
+	HDR_Image image( 4, 6, std::vector< Spectrum >{
+		B, B, R, R,
+		B, B, R, R,
+		R, R, B, B,
+		R, R, B, B,
+		G, G, G, G,
+		G, G, G, G
+	});
+
+	std::vector< HDR_Image > levels;
+	Textures::generate_mipmap(image, &levels);
+
+	std::vector< std::pair< uint32_t, uint32_t > > expected{
+		{2,3},
+		{1,1},
+	};
+
+	//has the right number of levels:
+	if (levels.size() != expected.size()) {
+		throw Test::error("Image of size " + std::to_string(image.w) + "x" + std::to_string(image.h) + " should have " + std::to_string(expected.size()) + " levels, but generated " + std::to_string(levels.size()) + ".");
+	}
+
+	//has right level sizes:
+	for (uint32_t l = 0; l < expected.size(); ++l) {
+		if (levels[l].w != expected[l].first || levels[l].h != expected[l].second) {
+			throw Test::error("Image of size " + std::to_string(image.w) + "x" + std::to_string(image.h) + " should have levels[" + std::to_string(l) + "] of size " + std::to_string(expected[l].first) + "x" + std::to_string(expected[l].second) + " but generated level of size " + std::to_string(levels[l].w) + "x" + std::to_string(levels[l].h) + ".");
+		}
+	}
+
+	//is pretty close to averaging the image color in the last level:
+	if (Test::differs(levels.back().at(0,0), Spectrum(2.0f/3.0f, 1.0f/3.0f, 2.0f/3.0f))) {
+		std::string params;
+		params += "expected: " + to_string(Spectrum(2.0f/3.0f, 1.0f/3.0f, 2.0f/3.0f)) + "\n";
+		params += "     got: " + to_string(levels.back().at(0,0));
+		puts("");
+		info("%s",params.c_str());
+		throw Test::error("Mipmap generation didn't approximately average image in last level. \nCheck that you are handing the odd src height correctly :)");
+	}
+
+});
+
+
+Test test_a1_task6_generate_mipmap_odd_w("a1.task6.generate_mipmap_odd_w", []() {
+	HDR_Image image( 6, 4, std::vector< Spectrum >{
+		B, B, R, R, G, G,
+		B, B, R, R, G, G,
+		R, R, B, B, G, G,
+		R, R, B, B, G, G
+	});
+
+	std::vector< HDR_Image > levels;
+	Textures::generate_mipmap(image, &levels);
+
+	std::vector< std::pair< uint32_t, uint32_t > > expected{
+		{3,2},
+		{1,1},
+	};
+
+	//has the right number of levels:
+	if (levels.size() != expected.size()) {
+		throw Test::error("Image of size " + std::to_string(image.w) + "x" + std::to_string(image.h) + " should have " + std::to_string(expected.size()) + " levels, but generated " + std::to_string(levels.size()) + ".");
+	}
+
+	//has right level sizes:
+	for (uint32_t l = 0; l < expected.size(); ++l) {
+		if (levels[l].w != expected[l].first || levels[l].h != expected[l].second) {
+			throw Test::error("Image of size " + std::to_string(image.w) + "x" + std::to_string(image.h) + " should have levels[" + std::to_string(l) + "] of size " + std::to_string(expected[l].first) + "x" + std::to_string(expected[l].second) + " but generated level of size " + std::to_string(levels[l].w) + "x" + std::to_string(levels[l].h) + ".");
+		}
+	}
+
+	//is pretty close to averaging the image color in the last level:
+	if (Test::differs(levels.back().at(0,0), Spectrum(2.0f/3.0f, 1.0f/3.0f, 2.0f/3.0f))) {
+		std::string params;
+		params += "expected: " + to_string(Spectrum(2.0f/3.0f, 1.0f/3.0f, 2.0f/3.0f)) + "\n";
+		params += "     got: " + to_string(levels.back().at(0,0));
+		puts("");
+		info("%s",params.c_str());
+		throw Test::error("Mipmap generation didn't approximately average image in last level. \nCheck that you are handing the odd src width correctly :)");
+	}
+
+});
+
+
 Test test_a1_task6_generate_mipmap("a1.task6.generate_mipmap", []() {
 	HDR_Image image( 4, 6, std::vector< Spectrum >{
 		R, R, B, B,
@@ -230,6 +314,7 @@ Test test_a1_task6_generate_mipmap("a1.task6.generate_mipmap", []() {
 
 
 });
+
 
 
 //-------------------------------------------

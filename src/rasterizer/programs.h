@@ -116,17 +116,6 @@ struct Lambertian {
 		float t1 = fdx_texcoord.norm();
 		float t2 = fdy_texcoord.norm();
 
-		// std::cout << "test 1 " << fdx_texcoord[0] << " " << square(fdx_texcoord[0]) << std::endl;
-		// std::cout << "test 2 " << fdx_texcoord[1] << " " << square(fdx_texcoord[1]) << std::endl;
-		// std::cout << "test 3 " << std::sqrt(t1 + t2) << std::endl;
-		
-		// std::cout << "test 4 " << fdy_texcoord[0] << " " << square(fdy_texcoord[0]) << std::endl;
-		// std::cout << "test 5 " << fdy_texcoord[1] << " " << square(fdy_texcoord[1]) << std::endl;
-		// std::cout << "test 6 " << std::sqrt(t1 + t2) << std::endl;
-
-
-		// std::cout << "t1 " << t1 << std::endl;
-		// std::cout << "t2 " << t2 << std::endl;
 		float L = std::max(t1, t2);
 		float lod;
 
