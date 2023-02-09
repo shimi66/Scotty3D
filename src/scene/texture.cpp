@@ -25,14 +25,40 @@ Spectrum sample_nearest(HDR_Image const &image, Vec2 uv) {
 Spectrum sample_bilinear(HDR_Image const &image, Vec2 uv) {
 	//A1T6: sample_bilinear
 	//TODO: implement bilinear sampling strategy on texture 'image'
+	// std::cout << "uv " << uv << std::endl;
+	// std::cout << "image w and h " << image.w << " " << image.h  << std::endl;
+	
+	float x = image.w * std::clamp(uv.x, 0.0f, 1.0f);
+	float y = image.h * std::clamp(uv.y, 0.0f, 1.0f);
 
-	return sample_nearest(image, uv); //placeholder so image doesn't look blank
+	// std::cout << "x, y " << x << " " << y << std::endl;
+
+	int32_t ix = int32_t(std::floor(x - 0.5));
+	int32_t iy = int32_t(std::floor(y - 0.5));
+
+	ix = std::min(ix, int32_t(image.w) - 1);
+	iy = std::min(iy, int32_t(image.h) - 1);
+	// std::cout << "ix and iy " << ix << " " << iy << std::endl;
+
+	float s = x - ix - 0.5f;
+	float t = y - iy - 0.5f;
+	// std::cout << "s " << s << std::endl;
+	// std::cout << "t " << t << std::endl;
+
+	// std::cout << "possible value??? " << image.at(ix+1, iy+1) << std::endl;
+
+
+	// return sample_nearest(image, uv);
+	return (1-t)*((1-s)*image.at(ix, iy) + s*image.at(ix+1, iy)) + t*((1-s)*image.at(ix, iy+1) + s*image.at(ix+1, iy+1)); //placeholder so image doesn't look blank
 }
 
 
 Spectrum sample_trilinear(HDR_Image const &base, std::vector< HDR_Image > const &levels, Vec2 uv, float lod) {
 	//A1T6: sample_trilinear
 	//TODO: implement trilinear sampling strategy on using mip-map 'levels'
+
+	std::cout << "base " << uv << std::endl;
+	std::cout << "lod " << lod << std::endl;
 
 	return sample_nearest(base, uv); //placeholder so image doesn't look blank
 }
@@ -116,10 +142,13 @@ Image::Image(Sampler sampler_, HDR_Image const &image_) {
 
 Spectrum Image::evaluate(Vec2 uv, float lod) const {
 	if (sampler == Sampler::nearest) {
+		// std::cout << "in nearest " << std::endl;
 		return sample_nearest(image, uv);
 	} else if (sampler == Sampler::bilinear) {
+		// std::cout << "in bilinear " << std::endl;
 		return sample_bilinear(image, uv);
 	} else {
+		// std::cout << "in trilinear " << std::endl;
 		return sample_trilinear(image, levels, uv, lod);
 	}
 }

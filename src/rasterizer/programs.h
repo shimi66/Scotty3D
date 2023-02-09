@@ -8,6 +8,9 @@
 #include "../lib/mathlib.h"
 #include "../scene/texture.h"
 
+// todo remove
+#include <iostream>
+
 namespace Programs {
 
 struct Lambertian {
@@ -108,9 +111,39 @@ struct Lambertian {
 		//  --> 'lod' is \lambda_base from equation (3.17)
 		// reading onward, you will discover that \rho can be computed in a number of ways
 		//  it is up to you to select one that makes sense in this context
+		fdx_texcoord = fdx_texcoord * wh;
+		fdy_texcoord = fdy_texcoord * wh;
+		float t1 = fdx_texcoord.norm();
+		float t2 = fdy_texcoord.norm();
 
-		float lod = 0.0f; //<-- replace this line
-		//-----
+		// std::cout << "test 1 " << fdx_texcoord[0] << " " << square(fdx_texcoord[0]) << std::endl;
+		// std::cout << "test 2 " << fdx_texcoord[1] << " " << square(fdx_texcoord[1]) << std::endl;
+		// std::cout << "test 3 " << std::sqrt(t1 + t2) << std::endl;
+		
+		// std::cout << "test 4 " << fdy_texcoord[0] << " " << square(fdy_texcoord[0]) << std::endl;
+		// std::cout << "test 5 " << fdy_texcoord[1] << " " << square(fdy_texcoord[1]) << std::endl;
+		// std::cout << "test 6 " << std::sqrt(t1 + t2) << std::endl;
+
+
+		// std::cout << "t1 " << t1 << std::endl;
+		// std::cout << "t2 " << t2 << std::endl;
+		float L = std::max(t1, t2);
+		float lod;
+
+		// std::cout << "L " << L << std::endl;
+		// std::cout << "wh " << wh << std::endl;
+
+		// std::cout << "pre lod " << lod << std::endl;
+		if (L <= 1){
+			lod = 0.0f;
+		}
+		else {
+			lod = std::round(std::log2(L)); 
+		}
+		// std::cout << "post lod " << lod << std::endl;
+	
+
+		
 
 
 		Vec3 normal = fa_normal.unit();
@@ -121,8 +154,12 @@ struct Lambertian {
 			//sky contribution:
 			+ (parameters.sky_energy - parameters.ground_energy) * (0.5f * dot(parameters.sky_direction, normal) + 0.5f) + parameters.ground_energy;
 
+		// std::cout << "light " << light << std::endl;
+
 		color = parameters.image->evaluate(fa_texcoord, lod) * light;
+		// std::cout << "color " << color << std::endl;
 		opacity = parameters.opacity;
+		// std::cout << "opacity " << opacity << std::endl;
 	}
 
 };

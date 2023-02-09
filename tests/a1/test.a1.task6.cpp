@@ -235,6 +235,8 @@ Test test_a1_task6_generate_mipmap("a1.task6.generate_mipmap", []() {
 //-------------------------------------------
 //check LOD computation in lambertian program:
 
+// only works once trilinear is implemented
+
 Test test_a1_task6_lod_simple("a1.task6.lod.simple", []() {
 
 	using L = Programs::Lambertian;
