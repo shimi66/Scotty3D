@@ -8,4 +8,4 @@ objs/
 README-SDL.txt
 SDL2.dll
 nest-libs/
-./*.obj
+*.obj
