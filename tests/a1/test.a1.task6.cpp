@@ -476,6 +476,46 @@ Test test_a1_task6_generate_mipmap_even_2("a1.task6.generate_mipmap_even_2", [](
 });
 
 
+Test test_a1_task6_generate_mipmap_even_3("a1.task6.generate_mipmap_even_3", []() {
+	HDR_Image image( 2, 4, std::vector< Spectrum >{
+		B, G,
+		R, R,
+		G, G,
+		G, G
+	});
+
+	std::vector< HDR_Image > levels;
+	Textures::generate_mipmap(image, &levels);
+
+	std::vector< std::pair< uint32_t, uint32_t > > expected{
+		{1,2},
+		{1,1},
+	};
+
+	//has the right number of levels:
+	if (levels.size() != expected.size()) {
+		throw Test::error("Image of size " + std::to_string(image.w) + "x" + std::to_string(image.h) + " should have " + std::to_string(expected.size()) + " levels, but generated " + std::to_string(levels.size()) + ".");
+	}
+
+	//has right level sizes:
+	for (uint32_t l = 0; l < expected.size(); ++l) {
+		if (levels[l].w != expected[l].first || levels[l].h != expected[l].second) {
+			throw Test::error("Image of size " + std::to_string(image.w) + "x" + std::to_string(image.h) + " should have levels[" + std::to_string(l) + "] of size " + std::to_string(expected[l].first) + "x" + std::to_string(expected[l].second) + " but generated level of size " + std::to_string(levels[l].w) + "x" + std::to_string(levels[l].h) + ".");
+		}
+	}
+
+	//is pretty close to averaging the image color in the last level:
+	if (Test::differs(levels.back().at(0,0), Spectrum(0.25f, 0.625f, 0.125f))) {
+		std::string params;
+		params += "expected: " + to_string(Spectrum(0.25f, 0.625f, 0.125f)) + "\n";
+		params += "     got: " + to_string(levels.back().at(0,0));
+		puts("");
+		info("%s",params.c_str());
+		throw Test::error("Mipmap generation didn't approximately average image in last level. \nCheck that you are handing the odd src height correctly :)");
+	}
+
+});
+
 
 
 Test test_a1_task6_generate_mipmap("a1.task6.generate_mipmap", []() {
