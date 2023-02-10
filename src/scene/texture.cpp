@@ -25,27 +25,19 @@ Spectrum sample_nearest(HDR_Image const &image, Vec2 uv) {
 Spectrum sample_bilinear(HDR_Image const &image, Vec2 uv) {
 	//A1T6: sample_bilinear
 	//TODO: implement bilinear sampling strategy on texture 'image'
-	// std::cout << "uv " << uv << std::endl;
-	// std::cout << "image w and h " << image.w << " " << image.h  << std::endl;
 	
 	float x = image.w * std::clamp(uv.x, 0.0f, 1.0f);
 	float y = image.h * std::clamp(uv.y, 0.0f, 1.0f);
 
-	// std::cout << "x, y " << x << " " << y << std::endl;
 
 	int32_t ix = int32_t(std::floor(x - 0.5));
 	int32_t iy = int32_t(std::floor(y - 0.5));
 
 	ix = std::min(ix, int32_t(image.w) - 1);
 	iy = std::min(iy, int32_t(image.h) - 1);
-	// std::cout << "ix and iy " << ix << " " << iy << std::endl;
 
 	float s = x - ix - 0.5f;
 	float t = y - iy - 0.5f;
-	// std::cout << "s " << s << std::endl;
-	// std::cout << "t " << t << std::endl;
-
-	// std::cout << "possible value??? " << image.at(ix+1, iy+1) << std::endl;
 
 	// use current box if i am on top or left edge (4 cases)
 	if (ix + 1 == (int) image.w && iy + 1 == (int) image.h){
@@ -68,14 +60,7 @@ Spectrum sample_trilinear(HDR_Image const &base, std::vector< HDR_Image > const 
 	//A1T6: sample_trilinear
 	//TODO: implement trilinear sampling strategy on using mip-map 'levels'
 
-	// std::cout << "base w and h " << base.w << " " << base.h  << std::endl;
-	// std::cout << "uv " << uv << std::endl;
-	// std::cout << "lod " << lod << std::endl;
-
-	// std::cout << "x, y " << x << " " << y << std::endl;
-
 	int32_t iz = int32_t(std::floor(lod));
-	// std::cout << "ix and iy iz " << ix << " " << iy << " " << iz << std::endl;
 
 	// call bilinear each level to get h0, h1 (see notes)
 	// interpolate between h0, h1
@@ -98,13 +83,9 @@ Spectrum sample_trilinear(HDR_Image const &base, std::vector< HDR_Image > const 
 		}
 		Spectrum h1 = sample_bilinear(levels[iz], uv);
 
-		// std::cout << "h0 and h1 " << h0 << " " << h1 << std::endl;
-
 		float coeff = lod - std::floor(lod);
 
 		Spectrum output = (1 - coeff)*h0 + coeff*h1;
-
-		// 0.75 =  lod  iz = 0
 
 		return output;
 	}
@@ -163,21 +144,42 @@ void generate_mipmap(HDR_Image const &base, std::vector< HDR_Image > *levels_) {
 		assert(std::max(1u, src.h / 2u) == dst.h);
 
 		//A1T6: generate
-		std::cout << std::endl;
 		//TODO: Write code to fill the levels of the mipmap hierarchy by downsampling
 		for (int width = 0; width < (int) dst.w; width++){
 			for (int height = 0; height < (int) dst.h; height++){
-				Spectrum tmp = src.at(2*width, 2*height);
-				tmp += src.at(2*width+1, 2*height);
-				tmp += src.at(2*width, 2*height+1);
-				tmp += src.at(2*width+1, 2*height+1);
-				tmp.r /= 4;
-				tmp.g /= 4;
-				tmp.b /= 4;
-				dst.at(width, height) = tmp;
-				std::cout << "dst.at " << dst.at(width, height) << std::endl;
+				if (2*height + 1 == (int) src.h && 2*width + 1 == (int) src.w){
+					Spectrum tmp = src.at(2*width, 2*height);
+					dst.at(width, height) = tmp;
+				}
+				else if (2*height + 1 == (int) src.h){
+					Spectrum tmp = src.at(2*width, 2*height);
+					tmp += src.at(2*width+1, 2*height);
+					tmp.r /= 2;
+					tmp.g /= 2;
+					tmp.b /= 2;
+					dst.at(width, height) = tmp;
+				}
+				else if (2*width + 1 == (int) src.w){
+					Spectrum tmp = src.at(2*width, 2*height);
+					tmp += src.at(2*width, 2*height+1);
+					tmp.r /= 2;
+					tmp.g /= 2;
+					tmp.b /= 2;
+					dst.at(width, height) = tmp;
+				}
+				else{
+					Spectrum tmp = src.at(2*width, 2*height);
+					tmp += src.at(2*width+1, 2*height);
+					tmp += src.at(2*width, 2*height+1);
+					tmp += src.at(2*width+1, 2*height+1);
+					tmp.r /= 4;
+					tmp.g /= 4;
+					tmp.b /= 4;
+					dst.at(width, height) = tmp;
+				}
+
+				
 			}
-			std::cout << std::endl;
 		}
 
 		//Be aware that the alignment of the samples in dst and src will be different depending on whether the image is even or odd.
