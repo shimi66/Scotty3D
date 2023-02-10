@@ -207,13 +207,10 @@ Image::Image(Sampler sampler_, HDR_Image const &image_) {
 
 Spectrum Image::evaluate(Vec2 uv, float lod) const {
 	if (sampler == Sampler::nearest) {
-		// std::cout << "in nearest " << std::endl;
 		return sample_nearest(image, uv);
 	} else if (sampler == Sampler::bilinear) {
-		// std::cout << "in bilinear " << std::endl;
 		return sample_bilinear(image, uv);
 	} else {
-		// std::cout << "in trilinear " << std::endl;
 		return sample_trilinear(image, levels, uv, lod);
 	}
 }
