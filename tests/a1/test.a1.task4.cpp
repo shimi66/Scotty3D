@@ -119,6 +119,7 @@ static void check_fragment_writeback(
 Test test_a1_task4_depth_always_25_50("a1.task4.depth.always.25_50", []() {
 	float interpolated_depth, vertex_depth;
 	fragment_depth_to_interpolated_and_vertex_depth(0.25f, &interpolated_depth, &vertex_depth);
+	std::cout << interpolated_depth << std::endl;
 	if (Test::differs(interpolated_depth, 0.25f)) throw Test::error("triangle depth interpolation not working as expected, can't perform this test.");
 
 	check_fragment_writeback< Pipeline_Blend_Replace | Pipeline_Depth_Always >(
@@ -168,6 +169,7 @@ Test test_a1_task4_depth_less_75_50("a1.task4.depth.less.75_50", []() {
 Test test_a1_task4_blend_add_1("a1.task4.blend.add.1", []() {
 	float interpolated_depth, vertex_depth;
 	fragment_depth_to_interpolated_and_vertex_depth(0.5f, &interpolated_depth, &vertex_depth);
+	std::cout << "depth " << interpolated_depth << std::endl;
 	if (Test::differs(interpolated_depth, 0.5f)) throw Test::error("triangle depth interpolation not working as expected, can't perform this test.");
 
 	check_fragment_writeback< Pipeline_Blend_Add | Pipeline_Depth_Always >(

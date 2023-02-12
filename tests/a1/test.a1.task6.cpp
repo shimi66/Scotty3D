@@ -1,6 +1,7 @@
 #include "test.h"
 
 #include "rasterizer/programs.h"
+#include<iostream>
 
 //build a testing mipmap where (r,g) have sample texcoord and (b) has level index:
 [[maybe_unused]]
@@ -134,7 +135,6 @@ Test test_a1_task6_bilinear_simple("a1.task6.sample.bilinear.simple", []() {
 	expect_spectrum("linear y", px_to_uv * Vec2(0.5f, 2.75f), Spectrum(0.75f, 0.25f, 0.0f) );
 	expect_spectrum("bilinear xy", px_to_uv * Vec2(2.4f, 3.25f), Spectrum(0.3f, 0.75f, 0.1f) );
 });
-
 
 
 //- - - - - - - - -
@@ -622,6 +622,7 @@ Test test_a1_task6_lod_simple("a1.task6.lod.simple", []() {
 
 	Vec2 px_to_texcoord = Vec2(1.0f / test_texture.image.w, 1.0f / test_texture.image.h);
 
+	std::cout << "Testing lod calculations from zero texels per pixel up to eight texels to pixel" << std::endl;
 	expect_lod("zero texels per pixel", px_to_texcoord * Vec2(0.0f, 0.0f), px_to_texcoord * Vec2(0.0f, 0.0f), -0.001f, 0.001f);
 	//larger leeway here given how many methods one might come up with.
 	//    but should generally be closer to level zero than not!
@@ -630,6 +631,8 @@ Test test_a1_task6_lod_simple("a1.task6.lod.simple", []() {
 	expect_lod("two texels per pixel", px_to_texcoord * Vec2(2.0f, 0.0f), px_to_texcoord * Vec2(0.0f, 2.0f), 0.5f, 1.5f);
 	//covering four texels, should be into level 2:
 	expect_lod("four texels per pixel", px_to_texcoord * Vec2(4.0f, 0.0f), px_to_texcoord * Vec2(0.0f, 4.0f), 1.5f, 2.5f);
+	//covering eight texels, should be into level 3:
+	expect_lod("eight texels per pixel", px_to_texcoord * Vec2(8.0f, 0.0f), px_to_texcoord * Vec2(0.0f, 8.0f), 2.5f, 3.5f);
 
 });
 

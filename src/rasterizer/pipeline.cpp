@@ -95,22 +95,36 @@ void Pipeline< primitive_type, Program, flags >::run(
 	std::vector< Fragment > fragments;
 	std::vector< Vec3 > const &samples = framebuffer.sample_pattern.centers_and_weights;
 
-	for (uint32_t s = 0; s < samples.size(); ++s) {
-		
-	
+	//helper used to put output of rasterization functions into fragments:
+	auto emit_fragment = [&](Fragment const &f) {
+		fragments.emplace_back(f);
+	};
 
-		//helper used to put output of rasterization functions into fragments:
-		auto emit_fragment = [&](Fragment const &f) {
-			fragments.emplace_back(f);
-		};
+	for (uint32_t s = 0; s < samples.size(); ++s) {
+	
 		//actually do rasterization:
 		if constexpr (primitive_type == PrimitiveType::Lines) {
 			for (uint32_t i = 0; i + 1 < clipped_vertices.size(); i += 2) {
-				rasterize_line( clipped_vertices[i], clipped_vertices[i+1], emit_fragment );
+				ClippedVertex tmp1 = clipped_vertices[i];
+				tmp1.fb_position.x = tmp1.fb_position.x + (samples[s].x - 0.5f);
+				tmp1.fb_position.y = tmp1.fb_position.y + (samples[s].y - 0.5f);
+				ClippedVertex tmp2 = clipped_vertices[i+1];
+				tmp2.fb_position.x = tmp2.fb_position.x + (samples[s].x - 0.5f);
+				tmp2.fb_position.y = tmp2.fb_position.y + (samples[s].y - 0.5f);
+				rasterize_line(tmp1, tmp2, emit_fragment );
 			}
 		} else if constexpr (primitive_type == PrimitiveType::Triangles) {
 			for (uint32_t i = 0; i + 2 < clipped_vertices.size(); i += 3) {
-				rasterize_triangle( clipped_vertices[i], clipped_vertices[i+1], clipped_vertices[i+2], emit_fragment );
+				ClippedVertex tmp1 = clipped_vertices[i];
+				tmp1.fb_position.x = tmp1.fb_position.x + (samples[s].x - 0.5f);
+				tmp1.fb_position.y = tmp1.fb_position.y + (samples[s].y - 0.5f);
+				ClippedVertex tmp2 = clipped_vertices[i+1];
+				tmp2.fb_position.x = tmp2.fb_position.x + (samples[s].x - 0.5f);
+				tmp2.fb_position.y = tmp2.fb_position.y + (samples[s].y - 0.5f);
+				ClippedVertex tmp3 = clipped_vertices[i+2];
+				tmp3.fb_position.x = tmp3.fb_position.x + (samples[s].x - 0.5f);
+				tmp3.fb_position.y = tmp3.fb_position.y + (samples[s].y - 0.5f);
+				rasterize_triangle( tmp1, tmp2, tmp3, emit_fragment );
 			}
 		} else {
 			static_assert( primitive_type == PrimitiveType::Lines, "Unsupported primitive type." );
@@ -1401,8 +1415,6 @@ void Pipeline< p, P, flags >::rasterize_triangle(
 	} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Correct) {
 		//A1T5: perspective correct triangles
 		//TODO: rasterize triangle (block comment above this function).
-
-		
 
 		for (float curr_x = min_x + 0.5f; curr_x <= max_x + 0.5; curr_x++){
 			for (float curr_y = min_y + 0.5f; curr_y <= max_y + 0.5; curr_y++){
