@@ -31,6 +31,9 @@ Task A1T7:
 	Fully implemented.
 
 render.png:
-	How did you make it?
+	I downloaded a .obj file for free from free3d.com. After that I imported the object and created a mesh instance of it.
+	Finally I performed a couple translations and rotations for the camera and object and renderd this image.
 
 	Any free model sources you need to credit?
+	https://free3d.com/3d-model/indoor-pot-plant-77983.html
+	
